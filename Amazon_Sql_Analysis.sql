@@ -21,6 +21,7 @@ select * from amazon limit 10;
 ##Monthly Revenue Trend
 
 #Calculate total revenue per month.
+
 select month(order_date) as month , 
        year(order_date) as year ,
        sum(total_revenue) as total_revenue
@@ -29,6 +30,7 @@ group by month ,year
 order by month ,year;
 
 #Show month-over-month growth percentage.
+
 select month ,
 	year ,
     total_rev,
@@ -38,6 +40,7 @@ from(
 select month(order_date) as month ,year(order_date) as year, sum(total_revenue) as total_rev from amazon group by year,month order by year,month )t;
 
 #Identify the highest revenue month.
+
 select month(order_date) as month , 
        sum(total_revenue) as total_revenue 
 from amazon
@@ -235,9 +238,7 @@ SELECT
     ) AS month_number,
 
     SUM(a.price * a.quantity_sold) AS revenue
-
 FROM amazon a
-
 JOIN (
     SELECT 
         product_id,
@@ -252,7 +253,6 @@ GROUP BY c.cohort_month, month_number
 ORDER BY c.cohort_month, month_number;
 
 
-select * from amazon limit 5;
 ##Rolling 3-Month Revenue
 #Calculate rolling 3-month moving average revenue
 
@@ -265,18 +265,6 @@ select year,
       avg(total_rev) over (order by year,month rows between 2 preceding and current row )as rolling_3_rev 
 from monthly_revenue 
 order by year ,month;
-
-
-#Identify declining trend periods
-
-
-
-
-
-
-use amazon;
-select * from amazon limit 5;
-(Use window functions)
 
 ##🔟 Revenue Concentration (Pareto 80/20 Rule)
 #Identify top 20% products contributing to 80% revenue
@@ -293,9 +281,6 @@ cum_calcu as (
 	from product_revenue
 )
 select * from cum_calcu where cum_revenue/total_revenue_all <0.8;
-
-select * from amazon limit 5;
-
 
 ##Price Elasticity Insight
 #Group data by price ranges
@@ -366,24 +351,20 @@ group by region;
 SELECT product_id, SUM(quantity_sold) AS total_quantity, AVG(discount_percent) AS avg_discount
 FROM amazon
 GROUP BY product_id
-HAVING avg_discount > =20 AND total_quantity < 5;   
+HAVING avg_discount >=20 AND total_quantity < 5;   
 
    
 #Detect regions with abnormal average revenue
-
-
-select * from amazon limit 5;
 ##15 Revenue Leakage Analysis
 
 #price * quantity_sold
 SELECT *,
-       (revenue_1 - revenue_2) AS revenue_loss from (select * ,(price* quantity_sold) as revenue_1 ,(discounted_price* quantity_sold) as revenue_2 
+       (revenue_1 - revenue_2) AS revenue_loss 
+from (select * ,(price* quantity_sold) as revenue_1 ,
+                   (discounted_price* quantity_sold) as revenue_2 
 from amazon) t;
 
-
-select * from amazon limit 5;
-
-#Show % revenue sacrificed per categoryamazonamazon
+#Show % revenue sacrificed per categoryamazon
 SELECT 
     product_category,
     SUM(price * quantity_sold) AS potential_revenue,
@@ -395,3 +376,115 @@ SELECT
 FROM amazon
 GROUP BY product_category
 ORDER BY pct_revenue_sacrificed DESC;
+
+
+##Find products with revenue higher than average revenue
+select * from (
+select product_id ,
+       sum(total_revenue) as total_revenue
+from amazon 
+group by product_id) x
+where total_revenue > (select avg(Total_revenue) from (select product_id,sum(total_revenue) total_revenue from amazon group by product_id)t);
+
+
+select * from 
+(
+select product_id	,
+sum( total_revenue) as total_revenue,
+(select avg(total_revenue) 
+from (
+select product_id,sum(total_revenue) as total_revenue from amazon group by product_id)t) as avg_revenue from amazon group by product_id)x 
+where total_revenue >avg_revenue;
+
+select* from amazon limit 5;
+##Find orders where quantity is greater than average quantity
+ select * from (select order_id,quantity_sold,(select avg(quantity_sold) from amazon) as avg_quantity from amazon)t where quantity_sold> avg_quantity ;
+
+
+##Find categories with total revenue above overall average revenue
+select product_category ,
+       sum(total_revenue)as total_reve ,
+       (select avg(total_revenue) from amazon) as overall_rev
+from amazon 
+group by product_category  
+having total_reve > Overall_rev;
+
+##Find top-selling products (above average total revenue)
+select * from (
+select product_id ,
+       sum(total_revenue) as total_revenue
+from amazon 
+group by product_id) x
+where total_revenue > (select avg(Total_revenue) from (select product_id,sum(total_revenue) total_revenue from amazon group by product_id)t);
+
+##5️ Find customers/regions with highest frequency than average
+
+select * from (
+    select customer_region,
+    count(order_id) as frequency 
+from amazon 
+group by customer_region) t 
+where frequency >   
+(select avg(frequency) from ( select customer_region,count(order_id) as frequency from amazon group by customer_region )x);
+
+
+
+##6 Find second highest revenue
+select max(total_revenue) as second_highest
+from amazon 
+where total_revenue < (
+    select max(total_revenue) as highest_revenue 
+    from amazon 
+);
+
+##Find products not in top 5 revenue
+select product_id,sum(total_revenue) from amazon group by product_id having product_id not in ( select product_id from (
+select product_id ,sum(total_revenue) as product_revenue from amazon group by product_id order by product_revenue desc limit 5)t);
+
+select * from amazon limit 5;
+
+##8️⃣ Find categories contributing more than 50% of total revenue
+select * from (select product_category,
+	   sum(total_revenue) as product_revenue,
+       (select sum(total_revenue) from amazon) as total_revenue ,
+       sum(total_revenue) /(select sum(total_revenue) from amazon) as revenue_ratio
+from amazon
+group by product_category)t
+where revenue_ratio>=0.5;
+
+
+##9️⃣ Find orders where revenue is higher than previous day's average
+
+SELECT *
+FROM (
+    SELECT 
+        order_date,
+        daily_revenue,
+        LAG(daily_revenue) OVER (ORDER BY order_date) AS prev_day_avg
+    FROM (
+        SELECT 
+            order_date,
+            SUM(total_revenue) AS daily_revenue
+        FROM amazon
+        GROUP BY order_date
+    ) t1
+) t2
+WHERE daily_revenue > prev_day_avg;
+
+##Find products whose revenue is higher than their category average
+SELECT 
+    product_id,
+    category_id,
+    product_revenue,
+    category_avg_revenue
+FROM (
+    SELECT 
+        product_id,
+        category_id,
+        SUM(total_revenue) AS product_revenue,
+        AVG(SUM(total_revenue)) OVER (PARTITION BY category_id) AS category_avg_revenue
+    FROM amazon
+    GROUP BY product_id, category_id
+) t
+WHERE product_revenue > category_avg_revenue;
+
